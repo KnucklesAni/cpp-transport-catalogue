@@ -11,4 +11,5 @@ void ProvideBusInfo(std::ostream& out,
  void ProvideStopInfo(std::ostream& out,
                     const transport_catalogue::TransportCatalogue& catalogue,
                     std::string_view& line);
+    void ProvideRequestedInfo(std::ostream& out,const transport_catalogue::TransportCatalogue& catalogue,std::istream &is);
 }  // namespace stat_reader

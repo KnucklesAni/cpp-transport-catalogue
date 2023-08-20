@@ -2,7 +2,7 @@
 
 #include <deque>
 #include <optional>
-#include <set>
+#include <unordered_set>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -29,28 +29,6 @@ struct Stop {
   bool coordinates_present() const {
     return coordinates.lat != 1024 || coordinates.lng != 1024;
   }
-  friend bool operator==(const Stop &lhs, const Stop &rhs) {
-    return lhs.name == rhs.name;
-  }
-  template <typename OtherType>
-  friend bool operator==(const Stop &lhs, const OtherType &rhs) {
-    return lhs.name == rhs;
-  }
-  template <typename OtherType>
-  friend bool operator==(const OtherType &lhs, const Stop &rhs) {
-    return lhs == rhs.name;
-  }
-  friend bool operator!=(const Stop &lhs, const Stop &rhs) {
-    return lhs.name != rhs.name;
-  }
-  template <typename OtherType>
-  friend bool operator!=(const Stop &lhs, const OtherType &rhs) {
-    return lhs.name != rhs;
-  }
-  template <typename OtherType>
-  friend bool operator!=(const OtherType &lhs, const Stop &rhs) {
-    return lhs != rhs.name;
-  }
 };
 
 enum class RouteType { BackAndForth, Round };
@@ -59,35 +37,13 @@ struct Bus {
   std::string name;
   RouteType route_type;
   std::vector<const Stop *> route = {};
-  friend bool operator==(const Bus &lhs, const Bus &rhs) {
-    return lhs.name == rhs.name;
-  }
-  template <typename OtherType>
-  friend bool operator==(const Bus &lhs, const OtherType &rhs) {
-    return lhs.name == rhs;
-  }
-  template <typename OtherType>
-  friend bool operator==(const OtherType &lhs, const Bus &rhs) {
-    return lhs == rhs.name;
-  }
-  friend bool operator!=(const Bus &lhs, const Bus &rhs) {
-    return lhs.name != rhs.name;
-  }
-  template <typename OtherType>
-  friend bool operator!=(const Bus &lhs, const OtherType &rhs) {
-    return lhs.name != rhs;
-  }
-  template <typename OtherType>
-  friend bool operator!=(const OtherType &lhs, const Bus &rhs) {
-    return lhs != rhs.name;
-  }
 };
 
 template <typename Type> class Catalogue {
 public:
   Catalogue() = default;
 
-  const Type *Add(Type &&data) {
+  const Type *Emplace(Type &&data) {
     Type &emplaced = data_.emplace_back(data);
     name_to_data_.emplace(emplaced.name, &emplaced);
     return &emplaced;
@@ -121,12 +77,13 @@ private:
 class TransportCatalogue {
 public:
   TransportCatalogue() = default;
-  const Bus *Add(Bus &&bus);
-  const Stop *Add(Stop &&stop);
+  const Bus *Emplace(Bus &&bus);
+  const Stop *Emplace(Stop &&stop);
   void AddDistance(const Stop *from, const Stop *to, double distance);
+  double GetDistance(const Stop *from,const Stop* to)const;
   const Catalogue<Bus> &GetBuses() const { return buses_; }
   const Catalogue<Stop> &GetStops() const { return stops_; }
-  const std::unordered_map<std::string_view, std::set<std::string_view>> &
+  const std::unordered_map<const Stop*, std::unordered_set<const Bus*>> &
   GetStopsToBuses() const {
     return stop_to_buses_;
   }
@@ -139,7 +96,7 @@ public:
 private:
   Catalogue<Bus> buses_;
   Catalogue<Stop> stops_;
-  std::unordered_map<std::string_view, std::set<std::string_view>>
+  std::unordered_map<const Stop*, std::unordered_set<const Bus*>>
       stop_to_buses_;
   std::unordered_map<std::pair<const Stop *, const Stop *>, double, pair_hash>
       stop_to_stop_distance_;

@@ -44,7 +44,7 @@ GetStop(transport_catalogue::TransportCatalogue &catalogue,
   auto [stop_name, delimeter_found] = string_reader::GetName(line, delimeter);
   auto stop = catalogue.GetStops().At(stop_name);
   if (!stop.has_value()) {
-    catalogue.Add(transport_catalogue::Stop{std::string{stop_name}});
+    catalogue.Emplace(transport_catalogue::Stop{std::string{stop_name}});
     stop = catalogue.GetStops().At(stop_name);
     if (!stop.has_value()) {
       throw std::logic_error("Couldn't add dummy stop");
@@ -114,5 +114,26 @@ void ReadStopToStopInfo(const transport_catalogue::Stop *stop_from,
     catalogue.AddDistance(stop_from, &GetStop(catalogue, line, ','), distance);
   }
 }
-
+ void ReadBusAndStopsInfo(transport_catalogue::TransportCatalogue &catalogue,std::istream &is){
+     size_t N;
+  is >> N;
+  is.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+  for (size_t line_no = 0; line_no < N; ++line_no) {
+    std::string linе;
+    std::getline(is, linе);
+    std::string_view line = linе;
+    if (line.substr(0, 4) == "Bus ") {
+      line = line.substr(4);
+      catalogue.Emplace(input_reader::ReadBusInfo(catalogue, line));
+    } else if (line.substr(0, 5) == "Stop ") {
+      line = line.substr(5);
+      const transport_catalogue::Stop *stop_from =
+          catalogue.Emplace(input_reader::ReadStopInfo(line));
+      input_reader::ReadStopToStopInfo(stop_from, catalogue, line);
+    } else {
+      throw std::logic_error{"Line must start with Bus or Stop!\nLine" +
+                             std::to_string(line_no + 1)};
+    }
+  }
+ }
 } // namespace input_reader

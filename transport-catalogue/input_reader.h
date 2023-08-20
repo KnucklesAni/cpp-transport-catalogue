@@ -23,5 +23,6 @@ transport_catalogue::Stop ReadStopInfo(std::string_view &line);
 void ReadStopToStopInfo(const transport_catalogue::Stop *stop_from,
                         transport_catalogue::TransportCatalogue &catalogue,
                         std::string_view &line);
+    void ReadBusAndStopsInfo(transport_catalogue::TransportCatalogue &catalogue,std::istream &is);
 
 } // namespace input_reader
