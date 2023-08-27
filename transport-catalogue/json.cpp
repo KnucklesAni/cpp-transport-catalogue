@@ -338,6 +338,84 @@ void PrintNode(const Node &node, const PrintContext &ctx) {
 }
 
 } // namespace
+Node::Node(const Value &value) {
+    if (std::holds_alternative<int>(value)) {
+      this->emplace<int>(std::get<int>(value));
+    } else if (std::holds_alternative<double>(value)) {
+      this->emplace<double>(std::get<double>(value));
+    } else if (std::holds_alternative<Array>(value)) {
+      this->emplace<Array>(std::get<Array>(value));
+    } else if (std::holds_alternative<std::string>(value)) {
+      this->emplace<std::string>(std::get<std::string>(value));
+    } else if (std::holds_alternative<Dict>(value)) {
+      this->emplace<Dict>(std::get<Dict>(value));
+    } else if (std::holds_alternative<bool>(value)) {
+      this->emplace<bool>(std::get<bool>(value));
+    } else {
+      this->emplace<std::nullptr_t>(nullptr);
+    }
+  }
+
+  bool Node::IsInt() const { return std::holds_alternative<int>(*this); }
+  int Node::AsInt() const {
+    if (!IsInt()) {
+      throw std::logic_error("Not an int");
+    }
+    return std::get<int>(*this);
+  }
+
+  bool Node::IsPureDouble() const { return std::holds_alternative<double>(*this); }
+  bool Node::IsDouble() const { return IsInt() || IsPureDouble(); }
+  double Node::AsDouble() const {
+    if (!IsDouble()) {
+      throw std::logic_error("Not a double");
+    }
+    return IsPureDouble() ? std::get<double>(*this) : AsInt();
+  }
+
+  bool Node::IsBool() const { return std::holds_alternative<bool>(*this); }
+  bool Node::AsBool() const {
+    if (!IsBool()) {
+      throw std::logic_error("Not a bool");
+    }
+
+    return std::get<bool>(*this);
+  }
+
+  bool Node::IsNull() const { return std::holds_alternative<std::nullptr_t>(*this); }
+
+  bool Node::IsArray() const { return std::holds_alternative<Array>(*this); }
+  const Array &Node::AsArray() const {
+    if (!IsArray()) {
+      throw std::logic_error("Not an array");
+    }
+
+    return std::get<Array>(*this);
+  }
+
+  bool Node::IsString() const { return std::holds_alternative<std::string>(*this); }
+  const std::string &Node::AsString() const {
+    if (!IsString()) {
+      throw std::logic_error("Not a string");
+    }
+
+    return std::get<std::string>(*this);
+  }
+
+  bool Node::IsMap() const { return std::holds_alternative<Dict>(*this); }
+  const Dict &Node::AsMap() const {
+    if (!IsMap()) {
+      throw std::logic_error("Not a dict");
+    }
+
+    return std::get<Dict>(*this);
+  }
+
+  bool Node::operator==(const Node &rhs) const {
+    return GetValue() == rhs.GetValue();
+  }
+
+  const Node::Value &Node::GetValue() const { return *this; }
 
 Document Load(std::istream &input) { return Document{LoadNode(input)}; }
 

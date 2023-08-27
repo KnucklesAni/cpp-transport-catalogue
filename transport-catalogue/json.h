@@ -23,84 +23,31 @@ public:
   using variant::variant;
   using Value = variant;
 
-  Node(const Value &value) {
-    if (std::holds_alternative<int>(value)) {
-      this->emplace<int>(std::get<int>(value));
-    } else if (std::holds_alternative<double>(value)) {
-      this->emplace<double>(std::get<double>(value));
-    } else if (std::holds_alternative<Array>(value)) {
-      this->emplace<Array>(std::get<Array>(value));
-    } else if (std::holds_alternative<std::string>(value)) {
-      this->emplace<std::string>(std::get<std::string>(value));
-    } else if (std::holds_alternative<Dict>(value)) {
-      this->emplace<Dict>(std::get<Dict>(value));
-    } else if (std::holds_alternative<bool>(value)) {
-      this->emplace<bool>(std::get<bool>(value));
-    } else {
-      this->emplace<std::nullptr_t>(nullptr);
-    }
-  }
+  Node(const Value &value); 
+  bool IsInt() const; 
+  int AsInt() const; 
 
-  bool IsInt() const { return std::holds_alternative<int>(*this); }
-  int AsInt() const {
-    if (!IsInt()) {
-      throw std::logic_error("Not an int");
-    }
-    return std::get<int>(*this);
-  }
+  bool IsPureDouble() const; 
+  bool IsDouble() const; 
+  double AsDouble() const; 
 
-  bool IsPureDouble() const { return std::holds_alternative<double>(*this); }
-  bool IsDouble() const { return IsInt() || IsPureDouble(); }
-  double AsDouble() const {
-    if (!IsDouble()) {
-      throw std::logic_error("Not a double");
-    }
-    return IsPureDouble() ? std::get<double>(*this) : AsInt();
-  }
+  bool IsBool() const; 
+  bool AsBool() const; 
 
-  bool IsBool() const { return std::holds_alternative<bool>(*this); }
-  bool AsBool() const {
-    if (!IsBool()) {
-      throw std::logic_error("Not a bool");
-    }
+  bool IsNull() const; 
 
-    return std::get<bool>(*this);
-  }
+  bool IsArray() const; 
+  const Array &AsArray() const; 
 
-  bool IsNull() const { return std::holds_alternative<std::nullptr_t>(*this); }
+  bool IsString() const; 
+  const std::string &AsString() const; 
 
-  bool IsArray() const { return std::holds_alternative<Array>(*this); }
-  const Array &AsArray() const {
-    if (!IsArray()) {
-      throw std::logic_error("Not an array");
-    }
+  bool IsMap() const; 
+  const Dict &AsMap() const; 
 
-    return std::get<Array>(*this);
-  }
+  bool operator==(const Node &rhs) const; 
 
-  bool IsString() const { return std::holds_alternative<std::string>(*this); }
-  const std::string &AsString() const {
-    if (!IsString()) {
-      throw std::logic_error("Not a string");
-    }
-
-    return std::get<std::string>(*this);
-  }
-
-  bool IsMap() const { return std::holds_alternative<Dict>(*this); }
-  const Dict &AsMap() const {
-    if (!IsMap()) {
-      throw std::logic_error("Not a dict");
-    }
-
-    return std::get<Dict>(*this);
-  }
-
-  bool operator==(const Node &rhs) const {
-    return GetValue() == rhs.GetValue();
-  }
-
-  const Value &GetValue() const { return *this; }
+  const Value &GetValue() const; 
 };
 
 inline bool operator!=(const Node &lhs, const Node &rhs) {
