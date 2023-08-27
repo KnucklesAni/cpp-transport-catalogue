@@ -32,10 +32,12 @@ const Stop *TransportCatalogue::Emplace(Stop &&stop) {
   stop_to_buses_[placed_stop];
   return placed_stop;
 }
+
 void TransportCatalogue::AddDistance(const Stop *from, const Stop *to,
                                      double distance) {
   stop_to_stop_distance_[{from, to}] = distance;
 }
+
 double TransportCatalogue::GetDistance(const Stop *from, const Stop *to) const {
   if (stop_to_stop_distance_.count({from, to}) > 0) {
     return stop_to_stop_distance_.at({from, to});
@@ -45,4 +47,5 @@ double TransportCatalogue::GetDistance(const Stop *from, const Stop *to) const {
     return ComputeDistance(from->coordinates, to->coordinates);
   }
 }
+
 } // namespace transport_catalogue
