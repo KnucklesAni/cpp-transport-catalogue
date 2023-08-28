@@ -79,6 +79,20 @@ private:
   double max_lat_ = 0;
   double zoom_coeff_ = 0;
 };
-svg::Document GetSVG(const RenderSettings &render_settings,
-                     const domain::Catalogue<domain::Bus> &buses);
+class MapRenderer {
+public:
+  MapRenderer(const RenderSettings &render_settings,
+              const domain::Catalogue<domain::Bus> &buses);
+  operator svg::Document();
+
+private:
+  const RenderSettings &render_settings_;
+  const std::map<std::string_view, domain::Bus *> sorted_buses_;
+  const std::map<std::string_view, const domain::Stop *> unique_stops_;
+  void GenerateRouteLines(svg::Document &result, SphereProjector &projector);
+  void GenerateRouteNames(svg::Document &result, SphereProjector &projector);
+  void GenerateStopCircles(svg::Document &result, SphereProjector &projector);
+  void GenerateStopNames(svg::Document &result, SphereProjector &projector);
+};
+
 } // namespace renderer

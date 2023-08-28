@@ -7,15 +7,16 @@
 #include <tuple>
 
 namespace json_reader {
-JSONReader::JSONReader(std::istream &json_source)
-    : input_(json::Load(json_source)) {
+JSONReader::JSONReader(std::istream& json_source):input_ (json::Load(json_source)) {
   const auto &root = input_.GetRoot().AsMap();
-  ReadBusAndStopsInfo(root.at("base_requests"));
-  render_settings_ = ProcessRenderSettings(root.at("render_settings").AsMap());
+ ReadBusAndStopsInfo( root.at("base_requests"));
+  render_settings_ =
+      ProcessRenderSettings(root.at("render_settings").AsMap());
 }
-void JSONReader::GenerateResponse(std::ostream &json_target) {
+void JSONReader::GenerateResponse(std::ostream& json_target) {
   const auto &root = input_.GetRoot().AsMap();
-  Print(json::Document{ProvideRequestedInfo(root.at("stat_requests"))},
+  Print(json::Document{ProvideRequestedInfo(
+             root.at("stat_requests"))},
         json_target);
 }
 namespace {
@@ -38,7 +39,9 @@ GetStop(transport_catalogue::TransportCatalogue &catalogue,
 
 } // namespace
 
-transport_catalogue::Bus JSONReader::ReadBusInfo(const json::Node &bus_node) {
+transport_catalogue::Bus
+JSONReader::ReadBusInfo(
+            const json::Node &bus_node) {
   const auto &bus_info = bus_node.AsMap();
   transport_catalogue::Bus bus = {bus_info.at("name").AsString(),
                                   bus_info.at("is_roundtrip").AsBool()
@@ -50,8 +53,7 @@ transport_catalogue::Bus JSONReader::ReadBusInfo(const json::Node &bus_node) {
   return bus;
 }
 
-transport_catalogue::Stop
-JSONReader::ReadStopInfo(const json::Node &stop_node) {
+transport_catalogue::Stop JSONReader::ReadStopInfo(const json::Node &stop_node) {
   const auto &stop_info = stop_node.AsMap();
   double lat = stop_info.at("latitude").AsDouble();
   // if (lat < 0 || lat > 90) {
@@ -67,19 +69,20 @@ JSONReader::ReadStopInfo(const json::Node &stop_node) {
 }
 
 void JSONReader::ReadStopToStopInfo(const transport_catalogue::Stop *stop_from,
-                                    const json::Node &road_distances_node) {
+                        const json::Node &road_distances_node) {
   for (auto &stop_info : road_distances_node.AsMap()) {
     catalogue_.AddDistance(stop_from, &GetStop(catalogue_, stop_info.first),
-                           stop_info.second.AsDouble());
+                          stop_info.second.AsDouble());
   }
 }
 
-void JSONReader::ReadBusAndStopsInfo(const json::Node &base_requests) {
+void JSONReader::ReadBusAndStopsInfo(
+                         const json::Node &base_requests) {
   for (auto &base_node : base_requests.AsArray()) {
     const auto &base_info = base_node.AsMap();
     const auto &type = base_info.at("type").AsString();
     if (type == "Bus") {
-      catalogue_.Emplace(ReadBusInfo(base_info));
+      catalogue_.Emplace(ReadBusInfo( base_info));
     } else if (type == "Stop") {
       const transport_catalogue::Stop *stop_from =
           catalogue_.Emplace(ReadStopInfo(base_info));
@@ -93,7 +96,9 @@ void JSONReader::ReadBusAndStopsInfo(const json::Node &base_requests) {
   }
 }
 
-json::Dict JSONReader::ProvideBusInfo(std::string_view name) {
+json::Dict
+JSONReader::ProvideBusInfo(
+               std::string_view name) {
   json::Dict result;
   auto bus_infо = catalogue_.GetBuses().At(name);
   if (!bus_infо.has_value()) {
@@ -134,7 +139,9 @@ json::Dict JSONReader::ProvideBusInfo(std::string_view name) {
   return result;
 }
 
-json::Dict JSONReader::ProvideStopInfo(std::string_view name) {
+json::Dict
+JSONReader::ProvideStopInfo(
+                std::string_view name) {
   json::Dict result;
   auto stop_infо = catalogue_.GetStops().At(name);
   if (!stop_infо.has_value()) {
@@ -155,7 +162,9 @@ json::Dict JSONReader::ProvideStopInfo(std::string_view name) {
   return result;
 }
 
-json::Node JSONReader::ProvideRequestedInfo(const json::Node &stat_requests) {
+json::Node
+JSONReader::ProvideRequestedInfo(        
+                     const json::Node &stat_requests) {
   json::Array result;
   for (const auto &request : stat_requests.AsArray()) {
     const auto &request_info = request.AsMap();
@@ -167,7 +176,8 @@ json::Node JSONReader::ProvideRequestedInfo(const json::Node &stat_requests) {
       response = ProvideStopInfo(request_info.at("name").AsString());
     } else if (type == "Map") {
       std::stringstream stream;
-      renderer::GetSVG(render_settings_, catalogue_.GetBuses()).Render(stream);
+      svg::Document map = renderer::MapRenderer(render_settings_, catalogue_.GetBuses());
+        map.Render(stream);
       response.insert({"map", stream.str()});
     } else {
       throw std::logic_error{"Type must be Bus or Stop!"};
@@ -177,8 +187,7 @@ json::Node JSONReader::ProvideRequestedInfo(const json::Node &stat_requests) {
   }
   return result;
 }
-renderer::RenderSettings
-JSONReader::ProcessRenderSettings(const json::Dict &settings) {
+renderer::RenderSettings JSONReader::ProcessRenderSettings(const json::Dict &settings) {
   renderer::RenderSettings result;
   result.width = settings.at("width").AsDouble();
   result.height = settings.at("height").AsDouble();
