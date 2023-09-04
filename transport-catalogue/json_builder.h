@@ -1,192 +1,170 @@
 #pragma once
 
-#include <vector>
-#include <string>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 #include "json.h"
 
 namespace json {
 
-	class BuilderHelper;
-	class AfterKey;
-	class AfterStartArray;
-	class AfterStartDict;
-	class AfterKeyAfterValue;
-	class AfterStartArrayAfterValue;
+// Dummy class with no data, suitable to be used as inline constexpr builder.
+inline constexpr class Builder {
+public:
+  constexpr Builder() {}
+  auto StartArray() const { return Array<void>(nullptr); }
+  auto StartDict() const { return Dict<void>(nullptr); }
+  auto Value(Node::Value value) const {
+    return Valuе<Node::Value, void>(std::move(value), nullptr);
+  }
 
+private:
+  template <typename PreviousNode> class Array;
+  template <typename PreviousNode> class Dict;
+  template <typename PreviousNode> class Kеy;
+  template <typename Vаluе, typename PreviousNode> class Valuе;
 
-	class Builder {
-	public:
-		friend BuilderHelper;
+  // EndArray and EndDict are collapsing all collected data into appropriate
+  // BuilderNodeClass::Value node.
+  //
+  // This is done with help of GetArray/GetDict helper functions which call
+  // parent functions till Array or Dict would be found.
+  //                       1
+  // If there are no appropriate Array or Dict that it's, naturally, a
+  // compile-time error.
+  template <typename PreviousNode> class Array {
+  public:
+    auto EndArray() && { return Valuе{json::Array{}, previous_node_}; }
 
-		AfterKey Key(std::string&& key);
+    auto Value(Node::Value value) && { return Valuе{std::move(value), this}; }
 
-		BuilderHelper Value(Node::Value&& value);
+  private:
+    Array(PreviousNode *previous_node) : previous_node_(previous_node) {}
 
-		// Кладем в вектор пустой словарь
-		AfterStartDict StartDict();
+    auto GetArray() { return std::pair{json::Array{}, previous_node_}; }
 
-		// Кладем в вектор пустой вектор
-		AfterStartArray StartArray();
+    PreviousNode *previous_node_;
 
-		// Заканчиваем словарь и добавляем его
-		// в родительский узел
-		BuilderHelper EndDict();
+    template <typename Vаluе, typename PreviousNodе>
+    friend class Builder::Valuе;
+    friend Builder;
+  };
 
-		// Заканчиваем вектор и добавляем его
-		// в родительский узел
-		BuilderHelper EndArray();
+  template <typename PreviousNode> class Dict {
+  public:
+    auto EndDict() && { return Valuе{json::Dict{}, previous_node_}; }
 
-		json::Node Build();
+    auto Key(std::string key) && { return Kеy<Dict<PreviousNode>>{key, this}; }
 
-	private:
-		const std::string constructor_name_ = "Builder";
-		const std::string key_func_name_ = "Key";
-		const std::string value_func_name_ = "Value";
-		const std::string start_dict_func_name_ = "StartDict";
-		const std::string start_array_func_name_ = "StartArray";
-		const std::string end_dict_func_name_ = "EndDict";
-		const std::string end_array_func_name_ = "EndArray";
-		const std::string build_func_name_ = "Build";
+  private:
+    Dict(PreviousNode *previous_node) : previous_node_(previous_node) {}
 
-		std::string last_function_ = "Builder";
-		bool is_root_ready_ = false;
+    auto GetDict() { return std::pair{json::Dict{}, previous_node_}; }
 
-		Node root_;
-		std::vector<std::string> keys_to_add_;
-		std::vector<std::variant<Array, Dict>> unfinished_nodes_;
+    PreviousNode *previous_node_;
 
-		class ErrorsChecker {
-		public:
-			ErrorsChecker(Builder& builder, const std::string& func_name)
-				: builder_(builder), func_name_(func_name) {
-				builder_.CheckErrors_(func_name_);
-			}
+    template <typename PreviousNodе> friend class Builder::Kеy;
+    friend Builder;
+  };
 
-			~ErrorsChecker() {
-				builder_.UpdateIsReadyFlag_();
-			}
+  template <typename PreviousNode> class Kеy {
+  public:
+    auto StartArray() && { return Array<Kеy<PreviousNode>>(this); }
 
-		private:
-			Builder& builder_;
-			const std::string& func_name_;
-		};
+    auto StartDict() && { return Dict<Kеy<PreviousNode>>(this); }
 
-		// Обновляет флаг готовности root'a
-		void UpdateIsReadyFlag_();
+    auto Value(Node::Value value) && { return Valuе{std::move(value), this}; }
 
-		// Метод для проверки на наличие ошибок
-		// в порядке вызова методов
-		void CheckErrors_(const std::string& func_name);
+  private:
+    Kеy(std::string key, PreviousNode *previous_node)
+        : key_(key), previous_node_(previous_node) {}
 
-		// Выбрасывает исключение, если root готов, и был вызван не Build
-		void CheckIfRootReady_(const std::string& func_name);
+    std::string key_;
+    PreviousNode *previous_node_;
 
-		// Проверяем, что метод Key вызван внутри словаря
-		void IsKeyUsedOnMap_(const std::string& func_name);
+    template <typename PreviousNodе> friend class Dict;
+    template <typename Vаluе, typename PreviousNodе> friend class Valuе;
+  };
 
-		// Проверка, что методы Value, StartDict и StartArray 
-		// были вызваны после конструктора, метода Key или в рамках вектора
-		void AreValueStartArrayAndStartDictUsedProperly_(const std::string& func_name);
+  template <typename Vаluе, typename PreviousNode> class Valuе {
+  public:
+    auto Key(std::string key) && {
+      static_assert(sizeof(GetDict()) > 0, "Use of Key() not in dict!");
+      return Builder::Kеy<std::remove_pointer_t<decltype(this)>>{std::move(key),
+                                                                 this};
+    }
 
-		// Провекра, что методы EndDict и EndArray не были вызваны
-		// в контектсе другого контейнера
-		void AreEndDictEndArrayUsedProperly_(const std::string& func_name);
+    auto StartArray() && {
+      static_assert(sizeof(GetArray()) > 0,
+                    "Use of StartArray() not in array or dict!");
+      return Array<std::remove_pointer_t<decltype(this)>>(this);
+    }
 
-		// Проверяем, что меод Key не был вызван два раза подряд
-		void UpdateLastUsedFunctionInfo_(const std::string& func_name);
+    auto EndArray() && {
+      auto [array, parent] = GetArray();
+      return Valuе<json::Array, std::remove_pointer_t<decltype(parent)>>{
+          array, parent};
+    }
 
-		void IsReadyToBuild_(const std::string& func_name);
-	};
+    auto StartDict() && {
+      static_assert(sizeof(GetArray()) > 0,
+                    "Use of StartArray() not in array or dict!");
+      return Dict<std::remove_pointer_t<decltype(this)>>(this);
+    }
 
+    auto EndDict() && {
+      auto [dict, parent] = GetDict();
+      return Valuе<json::Dict, std::remove_pointer_t<decltype(parent)>>{dict,
+                                                                        parent};
+    }
 
-	class BuilderHelper {
-	public:
-		BuilderHelper(Builder& builder)
-			: builder_(builder) {
-		}
-		AfterKey Key(std::string&& key);
-		BuilderHelper Value(Node::Value&& value);
-		AfterStartDict StartDict();
-		AfterStartArray StartArray();
-		BuilderHelper EndDict();
-		BuilderHelper EndArray();
-		json::Node Build();
-		Builder& GetBuilder();
+    template <typename ForwardValue> auto Value(ForwardValue value) && {
+      static_assert(sizeof(GetArray()) > 0, "Use of Value() not in array!");
+      return Valuе<ForwardValue, std::remove_pointer_t<decltype(this)>>{
+          std::move(value), this};
+    }
 
-	private:
-		Builder& builder_;
+    // Build is optional, one can just assign to json::Document, but it's only
+    // valid to do so if there are no parent, means all Arrays and Dicts are
+    // collected.
+    operator auto() && {
+      static_assert(std::is_same_v<PreviousNode, void>);
+      return value_;
+    }
+    auto Build() && {
+      static_assert(std::is_same_v<PreviousNode, void>);
+      return value_;
+    }
 
-	};
+  private:
+    Valuе(Vаluе value, PreviousNode *previous_node)
+        : value_(std::move(value)), previous_node_(previous_node) {}
 
-	// Код работы не должен компилироваться в следующих ситуациях:
-	// Непосредственно после Key вызван не Value, не StartDict и не StartArray
-	class AfterKey
-		: public BuilderHelper {
-	public:
-		AfterKey(Builder& builder)
-			: BuilderHelper(builder) {
-		}
-		AfterKeyAfterValue Value(Node::Value&& value);
-		AfterKey Key(std::string&& key) = delete;
-		BuilderHelper EndDict() = delete;
-		BuilderHelper EndArray() = delete;
-		json::Node Build() = delete;
-	};
+    // Helper function to collect array.
+    auto GetArray() {
+      auto result = previous_node_->GetArray();
+      result.first.push_back(value_);
+      return result;
+    }
 
-	// За вызовом StartArray следует не Value, не StartDict, не StartArray и не EndArray
-	class AfterStartArray
-		: public BuilderHelper {
-	public:
-		AfterStartArray(Builder& builder)
-			: BuilderHelper(builder) {
-		}
-		AfterStartArrayAfterValue Value(Node::Value&& value);
-		AfterKey Key(std::string&& key) = delete;
-		BuilderHelper EndDict() = delete;
-		json::Node Build() = delete;
-	};
+    // Helper function to collect Dict.
+    auto GetDict() {
+      auto result = previous_node_->previous_node_->GetDict();
+      if (result.first.count(previous_node_->key_) > 0) {
+        throw std::logic_error("Duplicated keys");
+      }
+      result.first.insert({previous_node_->key_, value_});
+      return result;
+    }
 
-	// За вызовом StartDict следует не Key и не EndDict
-	class AfterStartDict
-		: public BuilderHelper {
-	public:
-		AfterStartDict(Builder& builder)
-			: BuilderHelper(builder) {
-		}
-		BuilderHelper Value(Node::Value&& value) = delete;
-		BuilderHelper StartDict() = delete;
-		BuilderHelper StartArray() = delete;
-		BuilderHelper EndArray() = delete;
-		json::Node Build() = delete;
-	};
+    Vаluе value_;
+    PreviousNode *previous_node_;
 
-	// После вызова Value, последовавшего за вызовом Key, вызван не Key и не EndDict
-	class AfterKeyAfterValue
-		: public BuilderHelper {
-	public:
-		AfterKeyAfterValue(Builder& builder)
-			: BuilderHelper(builder) {
-		}
-		BuilderHelper Value(Node::Value&& value) = delete;
-		AfterStartDict StartDict() = delete;
-		AfterStartArray StartArray() = delete;
-		BuilderHelper EndArray() = delete;
-		json::Node Build() = delete;
-	};
+    template <typename Value, typename PreviousNodе>
+    friend class Builder::Valuе;
+    friend Builder;
+  };
 
-	// После вызова StartArray и серии Value следует не Value, не StartDict, не StartArray и не EndArray
-	class AfterStartArrayAfterValue
-		: public BuilderHelper {
-	public:
-		AfterStartArrayAfterValue(Builder& builder)
-			: BuilderHelper(builder) {
-		}
-		AfterKey Key(std::string&& key) = delete;
-		AfterStartArrayAfterValue Value(Node::Value&& value);
-		BuilderHelper EndDict() = delete;
-		json::Node Build() = delete;
-	};
+} JSON;
 
-}
+} // namespace json
