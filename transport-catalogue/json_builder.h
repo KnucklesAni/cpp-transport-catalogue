@@ -9,21 +9,25 @@
 namespace json {
 
 // Dummy class with no data, suitable to be used as inline constexpr builder.
-inline constexpr class Builder {
+class Builder {
 public:
   constexpr Builder() {}
-  auto StartArray() const { return Array<void>(nullptr); }
-  auto StartDict() const { return Dict<void>(nullptr); }
-  auto Value(Node::Value value) const {
-    return Valuе<Node::Value, void>(std::move(value), nullptr);
-  }
+  auto StartArray() const { return Array(EMPTY); }
+  auto StartDict() const { return Dict(EMPTY); }
+  auto Value(Node::Value value) const { return Valuе(std::move(value)); }
 
 private:
   template <typename PreviousNode> class Array;
   template <typename PreviousNode> class Dict;
   template <typename PreviousNode> class Kеy;
-  template <typename Vаluе, typename PreviousNode> class Valuе;
+  template <typename Vаluе> class Valuе;
+    
+  template <typename NotArray> static constexpr bool IsArray = false;
 
+  template <typename NotArray> static constexpr bool IsDict = false;
+
+  template <typename NotArray> static constexpr bool IsKey = false;
+  
   // EndArray and EndDict are collapsing all collected data into appropriate
   // BuilderNodeClass::Value node.
   //
@@ -32,139 +36,186 @@ private:
   //                       1
   // If there are no appropriate Array or Dict that it's, naturally, a
   // compile-time error.
-  template <typename PreviousNode> class Array {
+  template <typename PreviousNode> class Array : private PreviousNode {
   public:
-    auto EndArray() && { return Valuе{json::Array{}, previous_node_}; }
-
-    auto Value(Node::Value value) && { return Valuе{std::move(value), this}; }
-
-  private:
-    Array(PreviousNode *previous_node) : previous_node_(previous_node) {}
-
-    auto GetArray() { return std::pair{json::Array{}, previous_node_}; }
-
-    PreviousNode *previous_node_;
-
-    template <typename Vаluе, typename PreviousNodе>
-    friend class Builder::Valuе;
-    friend Builder;
-  };
-
-  template <typename PreviousNode> class Dict {
-  public:
-    auto EndDict() && { return Valuе{json::Dict{}, previous_node_}; }
-
-    auto Key(std::string key) && { return Kеy<Dict<PreviousNode>>{key, this}; }
-
-  private:
-    Dict(PreviousNode *previous_node) : previous_node_(previous_node) {}
-
-    auto GetDict() { return std::pair{json::Dict{}, previous_node_}; }
-
-    PreviousNode *previous_node_;
-
-    template <typename PreviousNodе> friend class Builder::Kеy;
-    friend Builder;
-  };
-
-  template <typename PreviousNode> class Kеy {
-  public:
-    auto StartArray() && { return Array<Kеy<PreviousNode>>(this); }
-
-    auto StartDict() && { return Dict<Kеy<PreviousNode>>(this); }
-
-    auto Value(Node::Value value) && { return Valuе{std::move(value), this}; }
-
-  private:
-    Kеy(std::string key, PreviousNode *previous_node)
-        : key_(key), previous_node_(previous_node) {}
-
-    std::string key_;
-    PreviousNode *previous_node_;
-
-    template <typename PreviousNodе> friend class Dict;
-    template <typename Vаluе, typename PreviousNodе> friend class Valuе;
-  };
-
-  template <typename Vаluе, typename PreviousNode> class Valuе {
-  public:
-    auto Key(std::string key) && {
-      static_assert(sizeof(GetDict()) > 0, "Use of Key() not in dict!");
-      return Builder::Kеy<std::remove_pointer_t<decltype(this)>>{std::move(key),
-                                                                 this};
+    auto EndArray() & {
+      if constexpr (IsArray<PreviousNode>) {
+        return PreviousNode::Value(array_);
+      } else if constexpr (IsKey<PreviousNode>) {
+        return PreviousNode::InsertValue(array_);
+      } else {
+        static_assert(std::is_same_v<const PreviousNode, decltype(EMPTY)>);
+        return Valuе{array_};
+      }
     }
-
-    auto StartArray() && {
-      static_assert(sizeof(GetArray()) > 0,
-                    "Use of StartArray() not in array or dict!");
-      return Array<std::remove_pointer_t<decltype(this)>>(this);
-    }
-
     auto EndArray() && {
-      auto [array, parent] = GetArray();
-      return Valuе<json::Array, std::remove_pointer_t<decltype(parent)>>{
-          array, parent};
+      if constexpr (IsArray<PreviousNode>) {
+        return std::move(*static_cast<PreviousNode *>(this))
+            .Value(std::move(array_));
+      } else if constexpr (IsKey<PreviousNode>) {
+        return std::move(*static_cast<PreviousNode *>(this))
+            .InsertValue(std::move(array_));
+      } else {
+        static_assert(std::is_same_v<const PreviousNode, decltype(EMPTY)>);
+        return Valuе{std::move(array_)};
+      }
     }
 
-    auto StartDict() && {
-      static_assert(sizeof(GetArray()) > 0,
-                    "Use of StartArray() not in array or dict!");
-      return Dict<std::remove_pointer_t<decltype(this)>>(this);
+    Array &Value(Node::Value value) & {
+      array_.push_back(value);
+      return *this;
+    }
+    Array &&Value(Node::Value value) && {
+      array_.push_back(value);
+      return std::move(*this);
     }
 
+    auto StartArray() & { return Array<Array<PreviousNode>>{*this}; }
+    auto StartArray() && {
+      return Array<Array<PreviousNode>>{std::move(*this)};
+    }
+
+    auto StartDict() & { return Dict{*this}; }
+    auto StartDict() && { return Dict{std::move(*this)}; }
+
+  private:
+    json::Array array_;
+
+    explicit Array(const PreviousNode &previous_node)
+        : PreviousNode(previous_node) {}
+    explicit Array(PreviousNode &&previous_node)
+        : PreviousNode(std::move(previous_node)) {}
+
+    template <typename Vаluе> friend class Valuе;
+    friend Builder;
+  };
+
+  template <typename PreviousNode> class Dict : private PreviousNode {
+  public:
+    auto EndDict() & {
+      if constexpr (IsArray<PreviousNode>) {
+        return PreviousNode::Value(dict_);
+      } else if constexpr (IsKey<PreviousNode>) {
+        return PreviousNode::InsertValue(dict_);
+      } else {
+        static_assert(std::is_same_v<const PreviousNode, decltype(EMPTY)>);
+        return Valuе{dict_};
+      }
+    }
     auto EndDict() && {
-      auto [dict, parent] = GetDict();
-      return Valuе<json::Dict, std::remove_pointer_t<decltype(parent)>>{dict,
-                                                                        parent};
+      if constexpr (IsArray<PreviousNode>) {
+        return std::move(*static_cast<PreviousNode *>(this))
+            .Value(std::move(dict_));
+      } else if constexpr (IsKey<PreviousNode>) {
+        return std::move(*static_cast<PreviousNode *>(this))
+            .InsertValue(std::move(dict_));
+      } else {
+        static_assert(std::is_same_v<const PreviousNode, decltype(EMPTY)>);
+        return Valuе{std::move(dict_)};
+      }
     }
 
-    template <typename ForwardValue> auto Value(ForwardValue value) && {
-      static_assert(sizeof(GetArray()) > 0, "Use of Value() not in array!");
-      return Valuе<ForwardValue, std::remove_pointer_t<decltype(this)>>{
-          std::move(value), this};
-    }
-
-    // Build is optional, one can just assign to json::Document, but it's only
-    // valid to do so if there are no parent, means all Arrays and Dicts are
-    // collected.
-    operator auto() && {
-      static_assert(std::is_same_v<PreviousNode, void>);
-      return value_;
-    }
-    auto Build() && {
-      static_assert(std::is_same_v<PreviousNode, void>);
-      return value_;
+    auto Key(std::string key) & { return Kеy{*this, std::move(key)}; }
+    auto Key(std::string key) && {
+      return Kеy{std::move(*this), std::move(key)};
     }
 
   private:
-    Valuе(Vаluе value, PreviousNode *previous_node)
-        : value_(std::move(value)), previous_node_(previous_node) {}
+    json::Dict dict_;
 
-    // Helper function to collect array.
-    auto GetArray() {
-      auto result = previous_node_->GetArray();
-      result.first.push_back(value_);
-      return result;
-    }
+    explicit Dict(const PreviousNode &previous_node)
+        : PreviousNode(previous_node) {}
+    explicit Dict(PreviousNode &&previous_node)
+        : PreviousNode(std::move(previous_node)) {}
 
-    // Helper function to collect Dict.
-    auto GetDict() {
-      auto result = previous_node_->previous_node_->GetDict();
-      if (result.first.count(previous_node_->key_) > 0) {
+    void CheckDuplicates(const std::string &key) {
+      if (dict_.count(key) > 0) {
         throw std::logic_error("Duplicated keys");
       }
-      result.first.insert({previous_node_->key_, value_});
-      return result;
     }
 
-    Vаluе value_;
-    PreviousNode *previous_node_;
+    Dict &&InsertValue(std::string &&key, Node::Value &&value) && {
+      dict_.insert({std::move(key), std::move(value)});
+      return std::move(*this);
+    }
 
-    template <typename Value, typename PreviousNodе>
-    friend class Builder::Valuе;
+    template <typename PreviousNodе> friend class Array;
+    template <typename PreviousNodе> friend class Kеy;
     friend Builder;
   };
 
-} JSON;
+  template <typename PreviousNode> class Kеy : private PreviousNode {
+  public:
+    auto StartArray() & { return Array{*this}; }
+    auto StartArray() && { return Array{std::move(*this)}; }
+
+    auto StartDict() & { return Dict{*this}; }
+    auto StartDict() && { return Dict{std::move(*this)}; }
+
+    auto Value(Node::Value value) & { return InsertValue(std::move(value)); }
+    auto Value(Node::Value value) && {
+      return std::move(*this).InsertValue(std::move(value));
+    }
+
+  private:
+    std::string key_;
+
+    Kеy(const PreviousNode &previous_node, std::string &&key)
+        : PreviousNode(previous_node), key_(std::move(key)) {
+      CheckDuplicates(key_);
+    }
+    Kеy(PreviousNode &&previous_node, std::string &&key)
+        : PreviousNode(std::move(previous_node)), key_(std::move(key)) {
+      CheckDuplicates(key_);
+    }
+
+    using PreviousNode::CheckDuplicates;
+
+    PreviousNode InsertValue(Node::Value &&value) & {
+      PreviousNode previous_node = *this;
+      return std::move(previous_node)
+          .InsertValue(std::string(key_), std::move(value));
+    }
+    PreviousNode InsertValue(Node::Value &&value) && {
+      return std::move(*this).InsertValue(std::move(key_), std::move(value));
+    }
+    using PreviousNode::InsertValue;
+
+    template <typename PreviousNodе> friend class Array;
+    template <typename PreviousNodе> friend class Dict;
+  };
+
+  template <typename Vаluе> class Valuе {
+  public:
+    // It's not clear why this class is even needed and why Build function
+    // is needed, but, apparently, that's how we are supposed to use builders.
+#if 0
+    operator auto() && {
+      return value_;
+    }
+#endif
+    auto Build() && { return value_; }
+
+  private:
+    Vаluе value_;
+
+    Valuе(Vаluе value) : value_(std::move(value)) {}
+
+    friend Builder;
+  };
+
+  static constexpr struct {
+  } EMPTY = {};
+};
+  template <typename PreviousNode>
+  constexpr bool Builder::IsArray<Builder::Array<PreviousNode>> = true;
+
+  template <typename PreviousNode>
+  constexpr bool Builder::IsDict<Builder::Dict<PreviousNode>> = true;
+
+  template <typename PreviousNode>
+  constexpr bool Builder::IsKey<Builder::Kеy<PreviousNode>> = true;
+
+inline constexpr Builder JSON;
 
 } // namespace json

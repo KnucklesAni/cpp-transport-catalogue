@@ -103,7 +103,8 @@ json::Dict JSONReader::ProvideBusInfo(std::string_view name) {
     return json::JSON
         .StartDict()
             .Key("error_message").Value("not found")
-        .EndDict();
+        .EndDict()
+        .Build();
     // clang-format oт
   }
   auto &bus_info = *bus_infо;
@@ -140,7 +141,8 @@ json::Dict JSONReader::ProvideBusInfo(std::string_view name) {
           .Key("route_length").Value(real_route_length)
           .Key("stop_count").Value(stop_count)
           .Key("unique_stop_count").Value(int(unique_stops.size()))
-      .EndDict();
+      .EndDict()
+      .Build();
   // clang-format oт
 }
 
@@ -151,7 +153,8 @@ json::Dict JSONReader::ProvideStopInfo(std::string_view name) {
     return json::JSON
         .StartDict()
             .Key("error_message").Value("not found")
-        .EndDict();
+        .EndDict()
+        .Build();
     // clang-format oт
   }
   auto &stop_info = catalogue_.GetStopsToBuses().at(*stop_infо);
@@ -168,7 +171,8 @@ json::Dict JSONReader::ProvideStopInfo(std::string_view name) {
   return json::JSON
       .StartDict()
           .Key("buses").Value(buses)
-      .EndDict();
+      .EndDict()
+      .Build();
   // clang-format oт
 }
 
@@ -189,7 +193,8 @@ json::Node JSONReader::ProvideRequestedInfo(const json::Node &stat_requests) {
       response = json::JSON
           .StartDict()
               .Key("map").Value(stream.str())
-          .EndDict();
+          .EndDict()
+          .Build();
       // clang-format oт
     } else if (type == "Stop") {
       response = ProvideStopInfo(request_info.at("name").AsString());
