@@ -10,17 +10,22 @@
 #include "json_builder.h"
 
 namespace json_reader {
+
 JSONReader::JSONReader(std::istream &json_source)
     : input_(json::Load(json_source)) {
   const auto &root = input_.GetRoot().AsMap();
   ReadBusAndStopsInfo(root.at("base_requests"));
   render_settings_ = ProcessRenderSettings(root.at("render_settings").AsMap());
+  routing_settings_ =
+      ProcessRoutingSettings(root.at("routing_settings").AsMap());
 }
+
 void JSONReader::GenerateResponse(std::ostream &json_target) {
   const auto &root = input_.GetRoot().AsMap();
   Print(json::Document{ProvideRequestedInfo(root.at("stat_requests"))},
         json_target);
 }
+
 namespace {
 
 // Return reference to Stop in the list of stops.
@@ -146,6 +151,59 @@ json::Dict JSONReader::ProvideBusInfo(std::string_view name) {
   // clang-format oт
 }
 
+json::Dict JSONReader::ProvideRouteInfo(const transport_router::Router& router, std::string_view from, std::string_view to) {
+  auto from_stop_infо = catalogue_.GetStops().At(from);
+  auto to_stop_infо = catalogue_.GetStops().At(to);
+  if (!from_stop_infо.has_value() || !to_stop_infо.has_value()) {
+    // clang-format off
+    return json::JSON
+        .StartDict()
+            .Key("error_message").Value("not found")
+        .EndDict()
+        .Build();
+    // clang-format oт
+  }
+  auto route_infо = router.BuildRoute(*from_stop_infо, *to_stop_infо);
+  if (!route_infо.has_value()) {
+    // clang-format off
+    return json::JSON
+        .StartDict()
+            .Key("error_message").Value("not found")
+        .EndDict()
+        .Build();
+    // clang-format oт
+  }
+  json::Array items;
+  auto& [total_time, actions] = *route_infо;
+  for (const auto& [action_wait, action_bus] : actions) {
+    // clang-format off
+    items.push_back(json::JSON
+        .StartDict()
+            .Key("type").Value("Wait")
+            .Key("stop_name").Value(std::string{action_wait.stop_name})
+            .Key("time").Value(action_wait.time)
+        .EndDict()
+        .Build());
+    items.push_back(json::JSON
+        .StartDict()
+            .Key("type").Value("Bus")
+            .Key("bus").Value(std::string{action_bus.bus_name})
+            .Key("span_count").Value(static_cast<int>(action_bus.span_count))
+            .Key("time").Value(action_bus.time)
+        .EndDict()
+        .Build());
+    // clang-format oт
+  }
+  // clang-format oт
+  return json::JSON
+      .StartDict()
+          .Key("total_time").Value(total_time)
+          .Key("items").Value(items)
+        .EndDict()
+        .Build();
+  // clang-format oт
+}
+
 json::Dict JSONReader::ProvideStopInfo(std::string_view name) {
   auto stop_infо = catalogue_.GetStops().At(name);
   if (!stop_infо.has_value()) {
@@ -178,6 +236,7 @@ json::Dict JSONReader::ProvideStopInfo(std::string_view name) {
 
 json::Node JSONReader::ProvideRequestedInfo(const json::Node &stat_requests) {
   json::Array result;
+  transport_router::Router router(routing_settings_, catalogue_);
   for (const auto &request : stat_requests.AsArray()) {
     const auto &request_info = request.AsMap();
     const auto &type = request_info.at("type").AsString();
@@ -196,16 +255,19 @@ json::Node JSONReader::ProvideRequestedInfo(const json::Node &stat_requests) {
           .EndDict()
           .Build();
       // clang-format oт
+    } else if (type == "Route") {
+      response = ProvideRouteInfo(router, request_info.at("from").AsString(), request_info.at("to").AsString());
     } else if (type == "Stop") {
       response = ProvideStopInfo(request_info.at("name").AsString());
     } else {
-      throw std::logic_error{"Type must be Bus, Map, Stop!"};
+      throw std::logic_error{"Type must be Bus, Map, Route, or Stop!"};
     }
     response.insert({"request_id", request_info.at("id")});
     result.push_back(std::move(response));
   }
   return result;
 }
+
 renderer::RenderSettings
 JSONReader::ProcessRenderSettings(const json::Dict &settings) {
   renderer::RenderSettings result;
@@ -229,6 +291,7 @@ JSONReader::ProcessRenderSettings(const json::Dict &settings) {
   }
   return result;
 }
+
 svg::Color JSONReader::ProcessColor(const json::Node &color) {
   if (color.IsString()) {
     return color.AsString();
@@ -240,4 +303,13 @@ svg::Color JSONReader::ProcessColor(const json::Node &color) {
   return svg::Rgba(color.AsArray()[0].AsInt(), color.AsArray()[1].AsInt(),
                    color.AsArray()[2].AsInt(), color.AsArray()[3].AsDouble());
 }
+
+transport_router::RoutingSettings
+JSONReader::ProcessRoutingSettings(const json::Dict &settings) {
+  transport_router::RoutingSettings result;
+  result.bus_velocity = settings.at("bus_velocity").AsDouble();
+  result.bus_wait_time = settings.at("bus_wait_time").AsDouble();
+  return result;
+}
+
 } // namespace json_reader

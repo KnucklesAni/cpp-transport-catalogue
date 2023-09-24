@@ -21,13 +21,13 @@ private:
   template <typename PreviousNode> class Dict;
   template <typename PreviousNode> class Kеy;
   template <typename Vаluе> class Valuе;
-    
+
   template <typename NotArray> static constexpr bool IsArray = false;
 
   template <typename NotArray> static constexpr bool IsDict = false;
 
   template <typename NotArray> static constexpr bool IsKey = false;
-  
+
   // EndArray and EndDict are collapsing all collected data into appropriate
   // BuilderNodeClass::Value node.
   //
@@ -207,14 +207,14 @@ private:
   static constexpr struct {
   } EMPTY = {};
 };
-  template <typename PreviousNode>
-  constexpr bool Builder::IsArray<Builder::Array<PreviousNode>> = true;
+template <typename PreviousNode>
+constexpr bool Builder::IsArray<Builder::Array<PreviousNode>> = true;
 
-  template <typename PreviousNode>
-  constexpr bool Builder::IsDict<Builder::Dict<PreviousNode>> = true;
+template <typename PreviousNode>
+constexpr bool Builder::IsDict<Builder::Dict<PreviousNode>> = true;
 
-  template <typename PreviousNode>
-  constexpr bool Builder::IsKey<Builder::Kеy<PreviousNode>> = true;
+template <typename PreviousNode>
+constexpr bool Builder::IsKey<Builder::Kеy<PreviousNode>> = true;
 
 inline constexpr Builder JSON;
 

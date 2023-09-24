@@ -4,6 +4,6 @@
 #include "transport_catalogue.h"
 
 int main() {
-    json_reader::JSONReader reader(std::cin);
-    reader.GenerateResponse(std::cout);
+  json_reader::JSONReader reader(std::cin);
+  reader.GenerateResponse(std::cout);
 }
