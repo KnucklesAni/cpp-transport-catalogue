@@ -1,42 +1,40 @@
 #pragma once
-#include <istream>
-#include <string_view>
-#include <tuple>
 
 #include "json.h"
-#include "map_renderer.h"
 #include "transport_catalogue.h"
-#include "transport_router.h"
+#include "map_renderer.h"
+#include "request_handler.h"
 
-namespace json_reader {
+#include <iostream>
 
-class JSONReader {
+class JsonReader {
 public:
-  JSONReader(std::istream &json_source);
-  void GenerateResponse(std::ostream &);
+    JsonReader(std::istream& input)
+        : input_(json::Load(input))
+    {}
+
+    const json::Node& GetBaseRequests() const;
+    const json::Node& GetStatRequests() const;
+    const json::Node& GetRenderSettings() const;
+    const json::Node& GetRoutingSettings() const;
+    const json::Node& GetSerializationSettings() const;
+
+    void ProcessRequests(const json::Node& stat_requests, RequestHandler& rh) const;
+
+    void FillCatalogue(transport::Catalogue& catalogue);
+    renderer::MapRenderer FillRenderSettings(const json::Node& settings) const;
+    transport::Router FillRoutingSettings(const json::Node& settings) const;
+
+    const json::Node PrintRoute(const json::Dict& request_map, RequestHandler& rh) const;
+    const json::Node PrintStop(const json::Dict& request_map, RequestHandler& rh) const;
+    const json::Node PrintMap(const json::Dict& request_map, RequestHandler& rh) const;
+    const json::Node PrintRouting(const json::Dict& request_map, RequestHandler& rh) const;
 
 private:
-  json::Document input_;
-  transport_catalogue::TransportCatalogue catalogue_;
-  renderer::RenderSettings render_settings_;
-  transport_router::RoutingSettings routing_settings_;
+    json::Document input_;
+    json::Node dummy_ = nullptr;
 
-  transport_catalogue::Bus ReadBusInfo(const json::Node &bus_node);
-  transport_catalogue::Stop ReadStopInfo(const json::Node &stop_node);
-  void ReadStopToStopInfo(const transport_catalogue::Stop *stop_from,
-
-                          const json::Node &road_distances_node);
-  void ReadBusAndStopsInfo(const json::Node &base_requests);
-
-  json::Dict ProvideBusInfo(std::string_view name);
-  json::Dict ProvideRouteInfo(const transport_router::Router &router,
-                              std::string_view from, std::string_view to);
-  json::Dict ProvideStopInfo(std::string_view name);
-  json::Node ProvideRequestedInfo(const json::Node &stat_requests);
-  renderer::RenderSettings ProcessRenderSettings(const json::Dict &settings);
-  svg::Color ProcessColor(const json::Node &color);
-  transport_router::RoutingSettings
-  ProcessRoutingSettings(const json::Dict &settings);
+    std::tuple<std::string_view, geo::Coordinates, std::map<std::string_view, int>> FillStop(const json::Dict& request_map) const;
+    void FillStopDistances(transport::Catalogue& catalogue) const;
+    std::tuple<std::string_view, std::vector<const transport::Stop*>, bool> FillRoute(const json::Dict& request_map, transport::Catalogue& catalogue) const;
 };
-
-} // namespace json_reader

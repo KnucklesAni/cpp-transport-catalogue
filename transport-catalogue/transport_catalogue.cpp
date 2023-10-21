@@ -1,51 +1,65 @@
-#include <iostream>
-#include <stdexcept>
-
 #include "transport_catalogue.h"
 
-namespace transport_catalogue {
+namespace transport {
 
-const Bus *TransportCatalogue::Emplace(Bus &&bus) {
-  if (buses_.At(bus.name).has_value()) {
-    throw std::out_of_range("Bus already exist");
-  }
-  const Bus *placed_bus = buses_.Emplace(std::move(bus));
-  for (const Stop *stop : placed_bus->route) {
-    stop_to_buses_[stop].insert(placed_bus);
-  }
-  return placed_bus;
+void Catalogue::AddStop(std::string_view stop_name, const geo::Coordinates coordinates) {
+    all_stops_.push_back({ std::string(stop_name), coordinates, {} });
+    stopname_to_stop_[all_stops_.back().name] = &all_stops_.back();
 }
 
-const Stop *TransportCatalogue::Emplace(Stop &&stop) {
-  if (auto old_stop = stops_.At(stop.name); old_stop.has_value()) {
-    auto оld_stop = *old_stop;
-    if (оld_stop->coordinates_present()) {
-      throw std::out_of_range("Stop already exist");
+void Catalogue::AddRoute(std::string_view bus_number, const std::vector<const Stop*> stops, bool is_circle) {
+    all_buses_.push_back({ std::string(bus_number), stops, is_circle });
+    busname_to_bus_[all_buses_.back().number] = &all_buses_.back();
+    for (const auto& route_stop : stops) {
+        for (auto& stop_ : all_stops_) {
+            if (stop_.name == route_stop->name) stop_.buses_by_stop.insert(std::string(bus_number));
+        }
     }
-    оld_stop->coordinates.lat = stop.coordinates.lat;
-    оld_stop->coordinates.lng = stop.coordinates.lng;
-    return *old_stop;
-  }
-  const Stop *placed_stop = stops_.Emplace(std::move(stop));
-  // We only need to insert empty set which operator[] does, we don't need to do
-  // anything else.
-  stop_to_buses_[placed_stop];
-  return placed_stop;
 }
 
-void TransportCatalogue::AddDistance(const Stop *from, const Stop *to,
-                                     double distance) {
-  stop_to_stop_distance_[{from, to}] = distance;
+const Bus* Catalogue::FindRoute(std::string_view bus_number) const {
+    return busname_to_bus_.count(bus_number) ? busname_to_bus_.at(bus_number) : nullptr;
 }
 
-double TransportCatalogue::GetDistance(const Stop *from, const Stop *to) const {
-  if (stop_to_stop_distance_.count({from, to}) > 0) {
-    return stop_to_stop_distance_.at({from, to});
-  } else if (stop_to_stop_distance_.count({to, from}) > 0) {
-    return stop_to_stop_distance_.at({to, from});
-  } else {
-    return ComputeDistance(from->coordinates, to->coordinates);
-  }
+const Stop* Catalogue::FindStop(std::string_view stop_name) const {
+    return stopname_to_stop_.count(stop_name) ? stopname_to_stop_.at(stop_name) : nullptr;
 }
 
-} // namespace transport_catalogue
+size_t Catalogue::UniqueStopsCount(std::string_view bus_number) const {
+    std::unordered_set<std::string_view> unique_stops;
+    for (const auto& stop : busname_to_bus_.at(bus_number)->stops) {
+        unique_stops.insert(stop->name);
+    }
+    return unique_stops.size();
+}
+
+void Catalogue::SetDistance(const Stop* from, const Stop* to, const int distance) {
+    stop_distances_[{from, to}] = distance;
+}
+
+int Catalogue::GetDistance(const Stop* from, const Stop* to) const {
+    if (stop_distances_.count({ from, to })) return stop_distances_.at({ from, to });
+    else if (stop_distances_.count({ to, from })) return stop_distances_.at({ to, from });
+    else return 0;
+}
+
+const std::map<std::string_view, const Bus*> Catalogue::GetSortedAllBuses() const {
+    std::map<std::string_view, const Bus*> result;
+    for (const auto& bus : busname_to_bus_) {
+        result.emplace(bus);
+    }
+    return result;
+}
+
+const std::map<std::string_view, const Stop*> Catalogue::GetSortedAllStops() const {
+    std::map<std::string_view, const Stop*> result;
+    for (const auto& stop : stopname_to_stop_) {
+        result.emplace(stop);
+    }
+    return result;
+}
+
+const std::unordered_map<std::pair<const Stop*, const Stop*>, int, Catalogue::StopDistancesHasher> Catalogue::GetStopDistances() const {
+    return stop_distances_;
+}
+}  // namespace transport
